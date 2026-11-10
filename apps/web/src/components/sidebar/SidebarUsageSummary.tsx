@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { RotateCwIcon, TicketIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   collectExternalUsageLinks,
@@ -7,9 +7,11 @@ import {
   collectLimitPools,
   cursorUsageWindowDetails,
   displayLimitWindows,
+  formatResetsIn,
   type LimitPresentations,
 } from "@t3tools/shared/usageLimits";
 
+import { useNowMinute } from "../../hooks/useNowMinute";
 import { environmentPresentations } from "../../state/presentation";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { providerClients } from "../settings/providerDriverMeta";
@@ -28,19 +30,20 @@ function SidebarUsageSummaryContent({
 }: {
   readonly presentations: LimitPresentations;
 }) {
-  const [now] = useState(Date.now);
+  const minute = useNowMinute();
+  const now = Date.parse(`${minute}:00Z`);
   const pools = collectLimitPools(collectLimitAccounts(presentations), now);
   const notices = collectLimitNotices(presentations);
   const external = collectExternalUsageLinks(presentations);
   return (
     <div className="w-60 max-w-[calc(100vw-3rem)] py-1 text-xs">
-      <div className="flex items-center justify-between gap-3 pb-2">
-        <span className="font-medium">Usage</span>
-        <span className="text-2xs text-muted-foreground">Remaining</span>
-      </div>
       <div className="pointer-events-auto max-h-[60vh] space-y-3 overflow-y-auto overscroll-contain">
         {pools.map((pool) => {
           const label = providerClients.get(pool.driver)?.label ?? String(pool.driver);
+          const credits = pool.accounts.reduce(
+            (sum, account) => sum + (account.limits.resetCredits?.availableCount ?? 0),
+            0,
+          );
           return (
             <div key={pool.driver} className="space-y-1.5">
               <div className="flex items-center gap-1.5 font-medium">
@@ -51,39 +54,64 @@ function SidebarUsageSummaryContent({
                   iconClassName="size-3.5"
                 />
                 <span>{label}</span>
+                {credits > 0 ? (
+                  <span
+                    className="ml-auto inline-flex items-center gap-1 text-2xs text-muted-foreground tabular-nums"
+                    aria-label={`${credits} reset ${credits === 1 ? "credit" : "credits"} banked`}
+                  >
+                    <TicketIcon className="size-3" aria-hidden />
+                    {credits}
+                  </span>
+                ) : null}
                 {pool.accounts.length > 1 ? (
                   <span className="ml-auto text-2xs font-normal text-muted-foreground">
                     {pool.accounts.length} accounts · pooled
                   </span>
                 ) : null}
               </div>
-              {displayLimitWindows(pool).map((window) => (
-                <div key={`${window.kind}:${window.id}`} className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-2xs text-muted-foreground">
-                    {pool.driver === "cursor"
-                      ? (cursorUsageWindowDetails(window.id)?.label ?? window.label)
-                      : window.label}
-                  </span>
-                  <div
-                    aria-hidden
-                    className="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-muted"
-                  >
+              {displayLimitWindows(pool).map((window) => {
+                const nextReset = window.resets[0];
+                const resetsIn = nextReset ? formatResetsIn(nextReset.member.window, now) : null;
+                return (
+                  <div key={`${window.kind}:${window.id}`} className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1 text-2xs text-muted-foreground">
+                      <div className="truncate">
+                        {pool.driver === "cursor"
+                          ? (cursorUsageWindowDetails(window.id)?.label ?? window.label)
+                          : window.label}
+                      </div>
+                      {resetsIn ? (
+                        <span
+                          className="flex items-center gap-1 text-3xs tabular-nums"
+                          aria-label={`${window.members.length > 1 ? "Next account " : ""}${resetsIn}`}
+                        >
+                          <RotateCwIcon className="size-2.5" aria-hidden />
+                          {window.members.length > 1 ? "Next " : ""}
+                          {resetsIn.replace(/^resets in /i, "").replace(/^resets /i, "")}
+                        </span>
+                      ) : null}
+                    </div>
                     <div
-                      className={
-                        window.remainingPercent <= 10
-                          ? "h-full rounded-full bg-destructive"
-                          : window.remainingPercent <= 25
-                            ? "h-full rounded-full bg-warning"
-                            : "h-full rounded-full bg-foreground/50"
-                      }
-                      style={{ width: `${window.remainingPercent}%` }}
-                    />
+                      aria-hidden
+                      className="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-muted"
+                    >
+                      <div
+                        className={
+                          window.remainingPercent <= 10
+                            ? "h-full rounded-full bg-destructive"
+                            : window.remainingPercent <= 25
+                              ? "h-full rounded-full bg-warning"
+                              : "h-full rounded-full bg-foreground/50"
+                        }
+                        style={{ width: `${window.remainingPercent}%` }}
+                      />
+                    </div>
+                    <span className="w-9 shrink-0 text-right tabular-nums">
+                      {window.remainingPercent}%<span className="sr-only"> remaining</span>
+                    </span>
                   </div>
-                  <span className="w-9 shrink-0 text-right tabular-nums">
-                    {window.remainingPercent}%
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           );
         })}
