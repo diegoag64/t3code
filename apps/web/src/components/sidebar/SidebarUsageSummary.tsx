@@ -16,14 +16,14 @@ import { providerClients } from "../settings/providerDriverMeta";
 
 /** Reads the existing snapshots only while the usage tooltip is mounted. */
 export function SidebarUsageSummary() {
-  const presentations = useAtomValue(environmentPresentations.presentationsAtom);
+  const presentations = useAtomValue(environmentPresentations.presentationsWithProvidersAtom);
   const connected = new Map(
     [...presentations].filter(([, presentation]) => presentation.connection.phase === "connected"),
   );
   return <SidebarUsageSummaryContent presentations={connected} />;
 }
 
-export function SidebarUsageSummaryContent({
+function SidebarUsageSummaryContent({
   presentations,
 }: {
   readonly presentations: LimitPresentations;
@@ -94,7 +94,7 @@ export function SidebarUsageSummaryContent({
         ))}
         {external.map((link) => (
           <p key={link.url} className="text-2xs text-muted-foreground">
-            {link.label}: view limits on the usage page.
+            {link.label}: open Usage for limits.
           </p>
         ))}
         {pools.length === 0 && notices.length === 0 && external.length === 0 ? (
